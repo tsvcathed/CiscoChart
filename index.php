@@ -11,7 +11,7 @@ $refresh = $_GET['refresh'];
 
 // Set defaults
 if (empty($community)) { $community = "tceo"; }
-if (empty($refresh)) { $refresh = "5"; }
+if (empty($refresh)) { $refresh = "10"; }
 
 // Change seconds to Milliseconds for setInterval loop
 $chartloop = $refresh * 1000;
