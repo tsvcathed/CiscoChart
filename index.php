@@ -79,11 +79,11 @@ function menu() {
             }
         }
         echo "</select>
+            Refresh (Secs): <input type=\"text\" name=\"refresh\" id=\"refresh\" value=\"$GLOBALS[refresh]\"/>
             <input type=\"submit\" id=\"submit\" value=\"Submit\"/>
             <input type=\"reset\" id=\"reset\" onclick=\"window.location='?';\" value=\"Reset\"/>
             </form>
-            </div>
-            <br />";
+            </div>";
     }
     else {
         echo "
@@ -95,7 +95,8 @@ function menu() {
 
 // Append Footer Function to close page
 function foot() {
-    echo "</body>
+    echo "<br />To enable per-second polling on Cisco routers, please issue the following command: snmp-server hc poll 100
+</body>
         </html>";
 }
 
@@ -105,7 +106,7 @@ if (empty($snmp) && !empty($ip) && !empty($oid0) && !empty($oid1) && !empty($com
     $routernm = snmpget($ip, $community, "1.3.6.1.2.1.1.5.0");
     head();
     menu();
-    echo "<script type=\"text/javascript\" src=\"http://code.jquery.com/jquery-1.9.1.js\"></script>
+    echo "<br /><script type=\"text/javascript\" src=\"http://code.jquery.com/jquery-1.9.1.js\"></script>
     <script type=\"text/javascript\">
     $(function () {
         $(document).ready(function() {
@@ -121,7 +122,8 @@ if (empty($snmp) && !empty($ip) && !empty($oid0) && !empty($oid1) && !empty($com
                 },
                 chart: {
                     type: 'areaspline',
-                    animation: Highcharts.svg,
+                    //animation: Highcharts.svg,
+                    animation: false,
                     marginRight: 10,
                     events: {
                         load: function() {
