@@ -1,0 +1,227 @@
+﻿
+<div class="row">
+    <div class="menu">
+        IP Address: <input id="ipAddress" value="10.113.112.1" /> | 
+        Community String: <input id="communityString" value="tceo" /> |
+        Interfaces: <select id="interfaceList"><option>Please Select</option></select> <a href="javascript:snmpChart.loadDevices();">(Refresh)</a> | 
+        Interval: <input id="interval" value="5" maxlength="2" />
+        <button id="chartStart" onclick="snmpChart.startChart();">Start Chart</button>
+        <button id="chartStop" disabled onclick="snmpChart.stopChart();">Stop Chart</button>
+    </div>
+    <div id="chartcontainer">
+
+    </div>
+</div>
+<script type="text/javascript" src="http://code.jquery.com/jquery-1.9.1.js"></script>
+    <script>
+
+        var snmpChart = {
+            isRunning: false,
+            getIsRunning: function(){
+                return this.isRunning;
+            },
+            setIsRunning: function(value) {
+                this.isRunning = value;
+            },
+            getIp: function() {
+                this.IP = $("#ipAddress").val();
+                return this.IP;
+            },
+            getCommunityString: function() {
+                this.communityString = $("#communityString").val();
+                return this.communityString;
+            },
+            getInterfaceId: function() {
+                this.interfaceId = $("#interfaceList").val();
+                return this.interfaceId;
+            },
+            getInterval: function() {
+                this.interval = $("#interval").val();
+                return this.interval;
+            },
+            setLastValue: function(data) {
+                this.lastValue = data;
+            },
+            loadDevices: function () {
+                var ip = this.getIp(),
+                    communityString = this.getCommunityString();
+
+                var populateDropDown = function (data) {
+                    $("#interfaceList").empty();
+                    // Populate the interface drop-down list
+
+                    $(data).map(function() {
+                        return $('<option>').val(this.Oid).text(this.Id + " / " + this.Name)[0];
+                    }).appendTo('#interfaceList');
+                };
+
+                // Make the call
+                $.ajax({
+                    url: '/api/Snmp/?ip=' + ip + '&communityString=' + communityString,
+                    dataType: 'json',
+                    success: populateDropDown
+                });
+            },
+            loadData: function(chart) {
+                var series0 = chart.series[0], //ingress
+                    series1 = chart.series[1]; //egress
+                var snmpChart = this;
+
+                var ip = this.getIp(),
+                    community = this.getCommunityString(),
+                    interfaceId = this.getInterfaceId(),
+                    interval = this.getInterval();
+
+                var addPoints = function (data, ingressSeries, egressSeries) {
+                    // set our initial last values to the current values.
+                    // Again it's a byte count, so to work out throughput we need the previous value
+                    if (snmpChart.lastValue == null)
+                        snmpChart.setLastValue(data);
+                    var x = (new Date()).getTime(); //data.Time;
+                    var egressVal = (data.Egress - snmpChart.lastValue.Egress) / 1000 / 1000; // Convert from bps to Mbps
+                    var ingressVal = (data.Ingress - snmpChart.lastValue.Ingress) / 1000 / 1000;
+                    egressSeries.addPoint([x, egressVal], true, true);
+                    ingressSeries.addPoint([x, ingressVal], true, true);
+                    
+                    snmpChart.setLastValue(data);
+                };
+                $.ajax({
+                    type: "GET",
+                    cache: false,
+                    url: "/api/Snmp?ip=" + ip + "&communityString=" + community + "&interfaceId=" + interfaceId + "&intervalSec=" + interval,
+                    dataType: "json",
+                    success: function (data) {
+                        //var parsedData = $.parseJSON(data);
+                        addPoints(data, series0, series1);
+                        if (snmpChart.getIsRunning())
+                            setTimeout(function () { snmpChart.loadData(chart); }, snmpChart.getInterval() * 1000);
+                    }
+                });
+            },
+            startChart: function() {
+                var chart = this.chart;
+                
+                this.setIsRunning(true);
+                this.setLastValue(null);
+
+                this.loadData(chart);
+                $('#chartStart').prop('disabled', true);
+                $('#chartStop').prop('disabled', false);
+            },
+
+            stopChart: function () {
+                var chart = this.chart;
+                this.setIsRunning(false);
+
+                $('#chartStart').prop('disabled', false);
+                $('#chartStop').prop('disabled', true);
+            },
+            /* Initialise the chart, called on document.ready */
+            initChart: function () {
+
+                Highcharts.setOptions({
+                    global: {
+                        useUTC: false
+                    }
+                });
+                var chart = new Highcharts.Chart({
+                    credits: {
+                        enabled: false
+                    },
+                    chart: {
+                        type: 'areaspline',
+                        //animation: Highcharts.svg,
+                        animation: false,
+                        renderTo: 'chartcontainer',
+                        marginRight: 10,
+                        events: {
+                            load: function () {
+                                snmpChart.loadData(this);
+                            }
+                        }
+                    },
+                    title: {
+                        text: 'Live Ingress/Egress Bandwidth for $routernm'
+                    },
+                    xAxis: {
+                        type: 'datetime',
+                        minTickInterval: 1
+                    },
+                    yAxis: {
+                        min: '0',
+                        title: {
+                            text: 'mbps'
+                        },
+                        plotLines: [{
+                            value: 0,
+                            width: 1,
+                            color: '#808080'
+                        }]
+                    },
+                    tooltip: {
+                        formatter: function () {
+                            var s = '';
+                            $.each(this.points, function (i, point) {
+                                s += '<b>' + this.series.name + '</b><br />' +
+                                Highcharts.dateFormat('%H:%M:%S %d-%m-%Y', this.x) + '<br />' +
+                                Highcharts.numberFormat(point.y, 2) + ' mbps<br />';
+                            });
+                            return s;
+                        },
+                        shared: true,
+                    },
+                    legend: {
+                        enabled: false
+                    },
+                    exporting: {
+                        enabled: false
+                    },
+                    plotOptions: {
+                        areaspline: {
+                            fillOpacity: 0.3
+                        }
+                    },
+                    series: [{
+                        name: 'Ingress Bandwidth',
+                        data: (function () {
+                            var data = [],
+                                time = (new Date()).getTime(),
+                                i;
+                            for (i = -19; i <= 0; i++) {
+                                data.push({
+                                    x: time + i * snmpChart.getInterval(),
+                                    y: null,
+                                });
+                            }
+                            return data;
+                        })()
+                    }, {
+                        name: 'Egress Bandwidth',
+                        data: (function () {
+                            var data = [],
+                                time = (new Date()).getTime(),
+                                i;
+                            for (i = -19; i <= 0; i++) {
+                                data.push({
+                                    x: time + i * snmpChart.getInterval(),
+                                    y: null,
+                                });
+                            }
+                            return data;
+                        })()
+                    }]
+                });
+
+                this.chart = chart;
+            }
+        };
+
+        $(function () {
+            $(document).ready(function () {
+                snmpChart.loadDevices();
+                snmpChart.initChart();
+            });
+        });
+</script>
+    <script src="http://code.highcharts.com/highcharts.js"></script>
+    <script src="http://code.highcharts.com/modules/exporting.js"></script>
